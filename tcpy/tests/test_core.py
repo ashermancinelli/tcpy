@@ -51,7 +51,7 @@ class TestTypes:
     
     def test_forall_type(self):
         t = ForallType("a", VarType("a"))
-        assert str(t) == "∀a. a"
+        assert str(t) == "forall a. a"
     
     def test_app_type(self):
         t = AppType(ConType("List"), ConType("Int"))
@@ -59,7 +59,7 @@ class TestTypes:
     
     def test_product_type(self):
         t = ProductType([ConType("Int"), ConType("Bool")])
-        assert str(t) == "(Int × Bool)"
+        assert str(t) == "(Int * Bool)"
     
     def test_empty_product(self):
         t = ProductType([])
@@ -79,7 +79,7 @@ class TestTerms:
     
     def test_lambda_term(self):
         t = LambdaTerm("x", ConType("Int"), VarTerm("x"))
-        assert str(t) == "λx : Int. x"
+        assert str(t) == "lambda x : Int. x"
     
     def test_app_term(self):
         t = AppTerm(VarTerm("f"), VarTerm("x"))
@@ -87,7 +87,7 @@ class TestTerms:
     
     def test_type_lambda_term(self):
         t = TypeLambdaTerm("a", VarTerm("x"))
-        assert str(t) == "Λa. x"
+        assert str(t) == "Lambda a. x"
     
     def test_constructor_term_no_args(self):
         t = ConstructorTerm("Nil", [])
@@ -158,7 +158,7 @@ class TestModuleStructure:
                      ForallType("a", ArrowType(VarType("a"), VarType("a"))),
                      TypeLambdaTerm("a", LambdaTerm("x", VarType("a"), VarTerm("x"))))
         assert td.name == "id"
-        assert str(td.ty) == "∀a. a -> a"
+        assert str(td.ty) == "forall a. a -> a"
     
     def test_core_module(self):
         mod = CoreModule([], [])
@@ -170,13 +170,13 @@ class TestComplexExamples:
     """Test more complex type and term constructions."""
     
     def test_polymorphic_identity(self):
-        # ∀a. a -> a
+        # foralla. a -> a
         id_type = ForallType("a", ArrowType(VarType("a"), VarType("a")))
-        # Λa. λx:a. x
+        # /\\a. \\x:a. x
         id_term = TypeLambdaTerm("a", LambdaTerm("x", VarType("a"), VarTerm("x")))
         
-        assert str(id_type) == "∀a. a -> a"
-        assert str(id_term) == "Λa. λx : a. x"
+        assert str(id_type) == "forall a. a -> a"
+        assert str(id_term) == "Lambda a. lambda x : a. x"
     
     def test_list_type_constructor(self):
         # List[Int] represented as (List Int)

@@ -7,7 +7,7 @@ from tcpy.worklist import (
     Judgment, SubJudgment, InfJudgment, ChkJudgment, InfAppJudgment
 )
 from tcpy.core import ConType, VarTerm, LitIntTerm
-from tcpy.errors import Ok, Err, UnboundVariableError
+from tcpy.errors import UnboundVariableError
 
 
 class TestTyVarKinds:
@@ -64,7 +64,7 @@ class TestWorklistEntries:
     """Test worklist entry types."""
     
     def test_tyvar_entry(self):
-        name = "α0"
+        name = "alpha0"
         kind = UniversalTyVar()
         entry = TyVarEntry(name, kind)
         assert isinstance(entry, WorklistEntry)
@@ -99,21 +99,21 @@ class TestWorklist:
         wl = Worklist()
         var1 = wl.fresh_var()
         var2 = wl.fresh_var()
-        assert var1 == "α0"
-        assert var2 == "α1"
+        assert var1 == "alpha0"
+        assert var2 == "alpha1"
         assert var1 != var2
     
     def test_fresh_evar_generation(self):
         wl = Worklist()
         evar1 = wl.fresh_evar()
         evar2 = wl.fresh_evar()
-        assert evar1 == "^α0"
-        assert evar2 == "^α1"
+        assert evar1 == "^alpha0"
+        assert evar2 == "^alpha1"
         assert evar1 != evar2
     
     def test_push_pop(self):
         wl = Worklist()
-        entry = TyVarEntry("α0", UniversalTyVar())
+        entry = TyVarEntry("alpha0", UniversalTyVar())
         
         wl.push(entry)
         assert len(wl.entries) == 1
@@ -150,52 +150,48 @@ class TestWorklist:
     
     def test_solve_evar_success(self):
         wl = Worklist()
-        evar_name = "^α0"
+        evar_name = "^alpha0"
         entry = TyVarEntry(evar_name, ExistentialTyVar())
         wl.push(entry)
         
         solution = ConType("Int")
-        result = wl.solve_evar(evar_name, solution)
-        
-        assert isinstance(result, Ok)
+        # Should not raise an exception
+        wl.solve_evar(evar_name, solution)
         assert isinstance(entry.kind, SolvedTyVar)
         assert entry.kind.solution == solution
     
     def test_solve_evar_not_found(self):
         wl = Worklist()
-        result = wl.solve_evar("^α0", ConType("Int"))
-        
-        assert isinstance(result, Err)
-        assert isinstance(result.error, UnboundVariableError)
-        assert result.error.name == "^α0"
+        # Should raise UnboundVariableError
+        with pytest.raises(UnboundVariableError) as exc_info:
+            wl.solve_evar("^alpha0", ConType("Int"))
+        assert exc_info.value.name == "^alpha0"
     
     def test_solve_evar_already_solved(self):
         wl = Worklist()
-        evar_name = "^α0"
+        evar_name = "^alpha0"
         original_solution = ConType("Int")
         entry = TyVarEntry(evar_name, SolvedTyVar(original_solution))
         wl.push(entry)
         
         new_solution = ConType("Bool")
-        result = wl.solve_evar(evar_name, new_solution)
-        
         # Should succeed but not change the solution
-        assert isinstance(result, Ok)
+        wl.solve_evar(evar_name, new_solution)
         assert isinstance(entry.kind, SolvedTyVar)
         assert entry.kind.solution == original_solution  # unchanged
     
     def test_before_ordering(self):
         wl = Worklist()
-        wl.push(TyVarEntry("α0", UniversalTyVar()))
-        wl.push(TyVarEntry("α1", ExistentialTyVar()))
+        wl.push(TyVarEntry("alpha0", UniversalTyVar()))
+        wl.push(TyVarEntry("alpha1", ExistentialTyVar()))
         
-        assert wl.before("α0", "α1")
-        assert not wl.before("α1", "α0")
+        assert wl.before("alpha0", "alpha1")
+        assert not wl.before("alpha1", "alpha0")
     
     def test_before_not_found(self):
         wl = Worklist()
-        wl.push(TyVarEntry("α0", UniversalTyVar()))
+        wl.push(TyVarEntry("alpha0", UniversalTyVar()))
         
-        assert not wl.before("α0", "α1")  # α1 not found
-        assert not wl.before("α1", "α0")  # α1 not found
-        assert not wl.before("α1", "α2")  # neither found
+        assert not wl.before("alpha0", "alpha1")  # alpha1 not found
+        assert not wl.before("alpha1", "alpha0")  # alpha1 not found
+        assert not wl.before("alpha1", "alpha2")  # neither found

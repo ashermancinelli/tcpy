@@ -1,4 +1,4 @@
-"""Core language for System-F-ω with explicit type applications and abstractions."""
+"""Core language for System-F-omega with explicit type applications and abstractions."""
 
 from __future__ import annotations
 from dataclasses import dataclass
@@ -63,7 +63,7 @@ class ArrowKind(Kind):
 
 
 class CoreType(ABC):
-    """Core types (System-F-ω)."""
+    """Core types (System-F-omega)."""
     
     @abstractmethod
     def __str__(self) -> str:
@@ -109,12 +109,12 @@ class ArrowType(CoreType):
 
 @dataclass
 class ForallType(CoreType):
-    """Universal quantification: ∀a. T"""
+    """Universal quantification: forall a. T"""
     var: str
     ty: CoreType
     
     def __str__(self) -> str:
-        return f"∀{self.var}. {self.ty}"
+        return f"forall {self.var}. {self.ty}"
 
 
 @dataclass
@@ -129,13 +129,13 @@ class AppType(CoreType):
 
 @dataclass
 class ProductType(CoreType):
-    """Product type: T1 × T2"""
+    """Product type: T1 * T2"""
     types: List[CoreType]
     
     def __str__(self) -> str:
         if not self.types:
             return "()"
-        return "(" + " × ".join(str(t) for t in self.types) + ")"
+        return "(" + " * ".join(str(t) for t in self.types) + ")"
 
 
 class CoreTerm(ABC):
@@ -166,13 +166,13 @@ class LitIntTerm(CoreTerm):
 
 @dataclass
 class LambdaTerm(CoreTerm):
-    """Lambda abstraction: λx:T. e"""
+    """Lambda abstraction: lambda x:T. e"""
     param: str
     param_ty: CoreType
     body: CoreTerm
     
     def __str__(self) -> str:
-        return f"λ{self.param} : {self.param_ty}. {self.body}"
+        return f"lambda {self.param} : {self.param_ty}. {self.body}"
 
 
 @dataclass
@@ -187,12 +187,12 @@ class AppTerm(CoreTerm):
 
 @dataclass
 class TypeLambdaTerm(CoreTerm):
-    """Type abstraction: Λα. e"""
+    """Type abstraction: Lambda alpha. e"""
     param: str
     body: CoreTerm
     
     def __str__(self) -> str:
-        return f"Λ{self.param}. {self.body}"
+        return f"Lambda {self.param}. {self.body}"
 
 
 @dataclass

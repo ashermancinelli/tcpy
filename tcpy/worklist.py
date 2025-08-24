@@ -1,4 +1,4 @@
-"""DK Worklist Algorithm for System-F-ω type inference."""
+"""DK Worklist Algorithm for System-F-omega type inference."""
 
 from __future__ import annotations
 from dataclasses import dataclass
@@ -9,7 +9,7 @@ from .core import (CoreType, CoreTerm, CorePattern, CoreBinOp,
                    ConType, VarType, ETVarType, ArrowType, ForallType, AppType,
                    VarTerm, LitIntTerm, LambdaTerm, AppTerm, TypeLambdaTerm, 
                    ConstructorTerm, BinOpTerm, IfTerm, CaseTerm, AddOp, SubOp, MulOp, DivOp, LtOp, LeOp)
-from .errors import TypeResult, Ok, Err, TypeError as TCPyTypeError
+from .errors import TypeError as TCPyTypeError
 from .errors import (
     UnboundVariableError, UnboundDataConstructorError, NotAFunctionError,
     ArityMismatchError, SubtypingError, InstantiationError
@@ -27,25 +27,25 @@ class TyVarKind(ABC):
 
 @dataclass
 class UniversalTyVar(TyVarKind):
-    """Universal type variable: α"""
+    """Universal type variable: alpha"""
     pass
 
 
 @dataclass
 class ExistentialTyVar(TyVarKind):
-    """Existential type variable: ^α"""
+    """Existential type variable: ^alpha"""
     pass
 
 
 @dataclass
 class SolvedTyVar(TyVarKind):
-    """Solved existential: ^α = τ"""
+    """Solved existential: ^alpha = tau"""
     solution: CoreType
 
 
 @dataclass
 class MarkerTyVar(TyVarKind):
-    """Marker: ►α (for scoping)"""
+    """Marker: >alpha (for scoping)"""
     pass
 
 
@@ -63,21 +63,21 @@ class SubJudgment(Judgment):
 
 @dataclass
 class InfJudgment(Judgment):
-    """Type inference: e ⊢ A"""
+    """Type inference: e |- A"""
     term: CoreTerm
     ty: CoreType
 
 
 @dataclass
 class ChkJudgment(Judgment):
-    """Type checking: e ⇐ A"""
+    """Type checking: e <= A"""
     term: CoreTerm
     ty: CoreType
 
 
 @dataclass
 class InfAppJudgment(Judgment):
-    """Application inference helper: A • e ⊢ C"""
+    """Application inference helper: A * e |- C"""
     func_ty: CoreType
     arg: CoreTerm
     result_ty: CoreType
@@ -90,7 +90,7 @@ class WorklistEntry(ABC):
 
 @dataclass
 class TyVarEntry(WorklistEntry):
-    """Type variable binding: α"""
+    """Type variable binding: alpha"""
     name: TyVar
     kind: TyVarKind
 
@@ -104,7 +104,7 @@ class VarEntry(WorklistEntry):
 
 @dataclass
 class JudgmentEntry(WorklistEntry):
-    """Judgment: Sub A B | Inf e ⊢ A | Chk e ⇐ A"""
+    """Judgment: Sub A B | Inf e |- A | Chk e <= A"""
     judgment: Judgment
 
 
@@ -117,13 +117,13 @@ class Worklist:
     
     def fresh_var(self) -> TyVar:
         """Generate a fresh universal type variable."""
-        var = f"α{self.next_var}"
+        var = f"alpha{self.next_var}"
         self.next_var += 1
         return var
     
     def fresh_evar(self) -> TyVar:
         """Generate a fresh existential type variable."""
-        var = f"^α{self.next_var}"
+        var = f"^alpha{self.next_var}"
         self.next_var += 1
         return var
     
@@ -140,23 +140,28 @@ class Worklist:
     def find_var(self, name: str) -> Optional[CoreType]:
         """Find a term variable's type in the worklist (search from end)."""
         for entry in reversed(self.entries):
-            if isinstance(entry, VarEntry) and entry.name == name:
-                return entry.ty
+            match entry:
+                case VarEntry(entry_name, ty) if entry_name == name:
+                    return ty
         return None
     
-    def solve_evar(self, name: str, ty: CoreType) -> TypeResult[None]:
+    def solve_evar(self, name: str, ty: CoreType) -> None:
         """Solve an existential variable with the given type."""
         for entry in self.entries:
-            if isinstance(entry, TyVarEntry) and entry.name == name:
-                if isinstance(entry.kind, ExistentialTyVar):
-                    entry.kind = SolvedTyVar(ty)
-                    return Ok(None)
-                elif isinstance(entry.kind, SolvedTyVar):
-                    # Already solved, that's OK
-                    return Ok(None)
-                # Skip other kinds (universal, marker)
+            match entry:
+                case TyVarEntry(entry_name, kind) if entry_name == name:
+                    match kind:
+                        case ExistentialTyVar():
+                            entry.kind = SolvedTyVar(ty)
+                            return
+                        case SolvedTyVar(_):
+                            # Already solved, that's OK
+                            return
+                        case _:
+                            # Skip other kinds (universal, marker)
+                            continue
         
-        return Err(UnboundVariableError(name))
+        raise UnboundVariableError(name)
     
     def before(self, a: str, b: str) -> bool:
         """Check if type variable 'a' appears before 'b' in the worklist."""
@@ -164,15 +169,14 @@ class Worklist:
         pos_b = None
         
         for i, entry in enumerate(self.entries):
-            if isinstance(entry, TyVarEntry):
-                if entry.name == a:
-                    pos_a = i
-                if entry.name == b:
-                    pos_b = i
+            match entry:
+                case TyVarEntry(name, _):
+                    if name == a:
+                        pos_a = i
+                    if name == b:
+                        pos_b = i
         
-        if pos_a is not None and pos_b is not None:
-            return pos_a < pos_b
-        return False
+        return pos_a is not None and pos_b is not None and pos_a < pos_b
 
 
 class DKInference:
@@ -191,12 +195,12 @@ class DKInference:
         """Create inference engine with given constructor and variable contexts."""
         return cls(data_constructors, var_context)
     
-    def check_type(self, term: CoreTerm, expected_ty: CoreType) -> TypeResult[None]:
+    def check_type(self, term: CoreTerm, expected_ty: CoreType) -> None:
         """Check that a term has the expected type."""
         self.worklist.push(JudgmentEntry(ChkJudgment(term, expected_ty)))
-        return self.solve()
+        self.solve()
     
-    def solve(self) -> TypeResult[None]:
+    def solve(self) -> None:
         """Process the worklist until empty or error."""
         while True:
             entry = self.worklist.pop()
@@ -204,281 +208,279 @@ class DKInference:
                 break
             
             # Process different entry types
-            if isinstance(entry, TyVarEntry) or isinstance(entry, VarEntry):
-                # Skip variable bindings during processing
-                continue
-            elif isinstance(entry, JudgmentEntry):
-                result = self.solve_judgment(entry.judgment)
-                if isinstance(result, Err):
-                    return result
-        
-        return Ok(None)
+            match entry:
+                case TyVarEntry(_, _) | VarEntry(_, _):
+                    # Skip variable bindings during processing
+                    continue
+                case JudgmentEntry(judgment):
+                    self.solve_judgment(judgment)
     
-    def solve_judgment(self, judgment: Judgment) -> TypeResult[None]:
+    def solve_judgment(self, judgment: Judgment) -> None:
         """Solve a specific judgment."""
-        if isinstance(judgment, SubJudgment):
-            return self.solve_subtype(judgment.left, judgment.right)
-        elif isinstance(judgment, InfJudgment):
-            return self.solve_inference(judgment.term, judgment.ty)
-        elif isinstance(judgment, ChkJudgment):
-            return self.solve_checking(judgment.term, judgment.ty)
-        elif isinstance(judgment, InfAppJudgment):
-            return self.solve_inf_app(judgment.func_ty, judgment.arg, judgment.result_ty)
-        else:
-            # This should not happen with proper typing
-            return Err(TCPyTypeError(f"Unknown judgment type: {type(judgment)}"))
+        match judgment:
+            case SubJudgment(left, right):
+                self.solve_subtype(left, right)
+            case InfJudgment(term, ty):
+                self.solve_inference(term, ty)
+            case ChkJudgment(term, ty):
+                self.solve_checking(term, ty)
+            case InfAppJudgment(func_ty, arg, result_ty):
+                self.solve_inf_app(func_ty, arg, result_ty)
+            case _:
+                # This should not happen with proper typing
+                raise TCPyTypeError(f"Unknown judgment type: {type(judgment)}")
     
-    def solve_subtype(self, left: CoreType, right: CoreType) -> TypeResult[None]:
+    def solve_subtype(self, left: CoreType, right: CoreType) -> None:
         """Solve subtyping constraint left <: right."""
         self.trace.append(f"Sub {left} <: {right}")
 
         # Reflexivity
         if left == right:
-            return Ok(None)
+            return
 
-        # Specific cases based on type constructors
-        if isinstance(left, ConType) and isinstance(right, ConType):
-            if left.name == right.name:
-                return Ok(None)
-        
-        if isinstance(left, VarType) and isinstance(right, VarType):
-            if left.name == right.name:
-                return Ok(None)
-        
-        if isinstance(left, ETVarType) and isinstance(right, ETVarType):
-            if left.name == right.name:
-                return Ok(None)
+        # Pattern match on type combinations
+        match (left, right):
+            # Specific cases based on type constructors
+            case (ConType(left_name), ConType(right_name)) if left_name == right_name:
+                return
+            case (VarType(left_name), VarType(right_name)) if left_name == right_name:
+                return
+            case (ETVarType(left_name), ETVarType(right_name)) if left_name == right_name:
+                return
 
-        # Function subtyping (contravariant in argument, covariant in result)
-        if isinstance(left, ArrowType) and isinstance(right, ArrowType):
-            # Add subtyping judgments: right.t1 <: left.t1 and left.t2 <: right.t2
-            self.worklist.push(JudgmentEntry(SubJudgment(right.t1, left.t1)))  # contravariant
-            self.worklist.push(JudgmentEntry(SubJudgment(left.t2, right.t2)))  # covariant
-            return Ok(None)
+            # Function subtyping (contravariant in argument, covariant in result)
+            case (ArrowType(l_param, l_ret), ArrowType(r_param, r_ret)):
+                # Add subtyping judgments: right.t1 <: left.t1 and left.t2 <: right.t2
+                self.worklist.push(JudgmentEntry(SubJudgment(r_param, l_param)))  # contravariant
+                self.worklist.push(JudgmentEntry(SubJudgment(l_ret, r_ret)))  # covariant
+                return
 
-        # Application subtyping (covariant in both components)
-        if isinstance(left, AppType) and isinstance(right, AppType):
-            self.worklist.push(JudgmentEntry(SubJudgment(left.t1, right.t1)))
-            self.worklist.push(JudgmentEntry(SubJudgment(left.t2, right.t2)))
-            return Ok(None)
+            # Application subtyping (covariant in both components)
+            case (AppType(l_func, l_arg), AppType(r_func, r_arg)):
+                self.worklist.push(JudgmentEntry(SubJudgment(l_func, r_func)))
+                self.worklist.push(JudgmentEntry(SubJudgment(l_arg, r_arg)))
+                return
 
-        # Forall right: |- A <: ∀α.B  becomes  α |- A <: B
-        if isinstance(right, ForallType):
-            fresh_var = self.worklist.fresh_var()
-            self.worklist.push(TyVarEntry(fresh_var, UniversalTyVar()))
-            substituted_ty = self.substitute_type(right.var, VarType(fresh_var), right.ty)
-            self.worklist.push(JudgmentEntry(SubJudgment(left, substituted_ty)))
-            return Ok(None)
+            # Forall right: |- A <: forall alpha.B  becomes  alpha |- A <: B
+            case (_, ForallType(var, body)):
+                fresh_var = self.worklist.fresh_var()
+                self.worklist.push(TyVarEntry(fresh_var, UniversalTyVar()))
+                substituted_ty = self.substitute_type(var, VarType(fresh_var), body)
+                self.worklist.push(JudgmentEntry(SubJudgment(left, substituted_ty)))
+                return
 
-        # Forall left: |- ∀α.A <: B  becomes  ►^α,^α |- [^α/α]A <: B
-        if isinstance(left, ForallType):
-            fresh_evar = self.worklist.fresh_evar()
-            self.worklist.push(TyVarEntry(fresh_evar, MarkerTyVar()))
-            self.worklist.push(TyVarEntry(fresh_evar, ExistentialTyVar()))
-            substituted_ty = self.substitute_type(left.var, ETVarType(fresh_evar), left.ty)
-            self.worklist.push(JudgmentEntry(SubJudgment(substituted_ty, right)))
-            return Ok(None)
+            # Forall left: |- forall alpha.A <: B  becomes  ►^alpha,^alpha |- [^alpha/alpha]A <: B
+            case (ForallType(var, body), _):
+                fresh_evar = self.worklist.fresh_evar()
+                self.worklist.push(TyVarEntry(fresh_evar, MarkerTyVar()))
+                self.worklist.push(TyVarEntry(fresh_evar, ExistentialTyVar()))
+                substituted_ty = self.substitute_type(var, ETVarType(fresh_evar), body)
+                self.worklist.push(JudgmentEntry(SubJudgment(substituted_ty, right)))
+                return
 
-        # Existential variable instantiation
-        if isinstance(left, ETVarType):
-            if not self.occurs_check(left.name, right):
-                return self.instantiate_left(left.name, right)
-        
-        if isinstance(right, ETVarType):
-            if not self.occurs_check(right.name, left):
-                return self.instantiate_right(left, right.name)
+            # Existential variable instantiation
+            case (ETVarType(var_name), _) if not self.occurs_check(var_name, right):
+                self.instantiate_left(var_name, right)
+                return
+            case (_, ETVarType(var_name)) if not self.occurs_check(var_name, left):
+                self.instantiate_right(left, var_name)
+                return
 
         # If none of the above cases match, subtyping fails
-        return Err(SubtypingError(left, right))
+        raise SubtypingError(left, right)
     
-    def solve_inference(self, term: CoreTerm, ty: CoreType) -> TypeResult[None]:
-        """Solve type inference judgment: term ⊢ ty."""
-        self.trace.append(f"Inf {self.term_to_string(term)} ⊢ {ty}")
+    def solve_inference(self, term: CoreTerm, ty: CoreType) -> None:
+        """Solve type inference judgment: term |- ty."""
+        self.trace.append(f"Inf {self.term_to_string(term)} |- {ty}")
 
-        if isinstance(term, VarTerm):
-            # Check pattern variable context first
-            if term.name in self.var_context:
-                var_ty = self.var_context[term.name]
-                self.worklist.push(JudgmentEntry(SubJudgment(var_ty, ty)))
-                return Ok(None)
-            
-            # Check worklist for variable bindings
-            found_ty = self.worklist.find_var(term.name)
-            if found_ty:
-                self.worklist.push(JudgmentEntry(SubJudgment(found_ty, ty)))
-                return Ok(None)
-            
-            # Check data constructors
-            if term.name in self.data_constructors:
-                constructor_ty = self.data_constructors[term.name]
-                self.worklist.push(JudgmentEntry(SubJudgment(constructor_ty, ty)))
-                return Ok(None)
-            
-            return Err(UnboundVariableError(term.name))
+        match term:
+            case VarTerm(name):
+                # Check pattern variable context first
+                if name in self.var_context:
+                    var_ty = self.var_context[name]
+                    self.worklist.push(JudgmentEntry(SubJudgment(var_ty, ty)))
+                    return
+                
+                # Check worklist for variable bindings
+                found_ty = self.worklist.find_var(name)
+                if found_ty:
+                    self.worklist.push(JudgmentEntry(SubJudgment(found_ty, ty)))
+                    return
+                
+                # Check data constructors
+                if name in self.data_constructors:
+                    constructor_ty = self.data_constructors[name]
+                    self.worklist.push(JudgmentEntry(SubJudgment(constructor_ty, ty)))
+                    return
+                
+                raise UnboundVariableError(name)
 
-        elif isinstance(term, LitIntTerm):
-            # Integer literals have type Int
-            self.worklist.push(JudgmentEntry(SubJudgment(ConType("Int"), ty)))
-            return Ok(None)
+            case LitIntTerm(_):
+                # Integer literals have type Int
+                self.worklist.push(JudgmentEntry(SubJudgment(ConType("Int"), ty)))
+                return
 
-        elif isinstance(term, LambdaTerm):
-            # λx:T. e  should infer  T -> T'  where e ⊢ T'
-            result_ty = ETVarType(self.worklist.fresh_evar())
-            self.worklist.push(TyVarEntry(result_ty.name, ExistentialTyVar()))
-            
-            arrow_ty = ArrowType(term.param_ty, result_ty)
-            self.worklist.push(JudgmentEntry(SubJudgment(arrow_ty, ty)))
-            
-            # Add parameter to variable context and check body
-            self.worklist.push(VarEntry(term.param, term.param_ty))
-            self.worklist.push(JudgmentEntry(InfJudgment(term.body, result_ty)))
-            return Ok(None)
+            case LambdaTerm(param, param_ty, body):
+                # lambda x:T. e  should infer  T -> T'  where e |- T'
+                result_ty = ETVarType(self.worklist.fresh_evar())
+                self.worklist.push(TyVarEntry(result_ty.name, ExistentialTyVar()))
+                
+                arrow_ty = ArrowType(param_ty, result_ty)
+                self.worklist.push(JudgmentEntry(SubJudgment(arrow_ty, ty)))
+                
+                # Add parameter to variable context and check body
+                self.worklist.push(VarEntry(param, param_ty))
+                self.worklist.push(JudgmentEntry(InfJudgment(body, result_ty)))
+                return
 
-        elif isinstance(term, AppTerm):
-            # e1 e2  where  e1 ⊢ T1  and we need T1 • e2 ⊢ ty
-            func_ty = ETVarType(self.worklist.fresh_evar())
-            self.worklist.push(TyVarEntry(func_ty.name, ExistentialTyVar()))
-            
-            self.worklist.push(JudgmentEntry(InfAppJudgment(func_ty, term.arg, ty)))
-            self.worklist.push(JudgmentEntry(InfJudgment(term.func, func_ty)))
-            return Ok(None)
+            case AppTerm(func, arg):
+                # e1 e2  where  e1 |- T1  and we need T1 * e2 |- ty
+                func_ty = ETVarType(self.worklist.fresh_evar())
+                self.worklist.push(TyVarEntry(func_ty.name, ExistentialTyVar()))
+                
+                self.worklist.push(JudgmentEntry(InfAppJudgment(func_ty, arg, ty)))
+                self.worklist.push(JudgmentEntry(InfJudgment(func, func_ty)))
+                return
 
-        elif isinstance(term, TypeLambdaTerm):
-            # Λα. e  should infer  ∀α. T  where e ⊢ T
-            body_ty = ETVarType(self.worklist.fresh_evar())
-            self.worklist.push(TyVarEntry(body_ty.name, ExistentialTyVar()))
-            
-            forall_ty = ForallType(term.param, body_ty)
-            self.worklist.push(JudgmentEntry(SubJudgment(forall_ty, ty)))
-            
-            # Add type variable to context and check body
-            self.worklist.push(TyVarEntry(term.param, UniversalTyVar()))
-            self.worklist.push(JudgmentEntry(InfJudgment(term.body, body_ty)))
-            return Ok(None)
+            case TypeLambdaTerm(param, body):
+                # Lambda alpha. e  should infer  forall alpha. T  where e |- T
+                body_ty = ETVarType(self.worklist.fresh_evar())
+                self.worklist.push(TyVarEntry(body_ty.name, ExistentialTyVar()))
+                
+                forall_ty = ForallType(param, body_ty)
+                self.worklist.push(JudgmentEntry(SubJudgment(forall_ty, ty)))
+                
+                # Add type variable to context and check body
+                self.worklist.push(TyVarEntry(param, UniversalTyVar()))
+                self.worklist.push(JudgmentEntry(InfJudgment(body, body_ty)))
+                return
 
-        elif isinstance(term, ConstructorTerm):
-            # Constructor application
-            if term.name in self.data_constructors:
-                constructor_ty = self.data_constructors[term.name]
-                # TODO: Handle constructor arguments properly
-                # For now, just check the constructor type matches
-                self.worklist.push(JudgmentEntry(SubJudgment(constructor_ty, ty)))
-                return Ok(None)
-            else:
-                return Err(UnboundDataConstructorError(term.name))
+            case ConstructorTerm(name, args):
+                # Constructor application
+                if name in self.data_constructors:
+                    constructor_ty = self.data_constructors[name]
+                    # TODO: Handle constructor arguments properly
+                    # For now, just check the constructor type matches
+                    self.worklist.push(JudgmentEntry(SubJudgment(constructor_ty, ty)))
+                    return
+                else:
+                    raise UnboundDataConstructorError(name)
 
-        elif isinstance(term, BinOpTerm):
-            # Binary operations
-            left_ty, right_ty, result_ty = self.infer_binop_types(term.op)
-            
-            # Check operands have correct types
-            self.worklist.push(JudgmentEntry(ChkJudgment(term.left, left_ty)))
-            self.worklist.push(JudgmentEntry(ChkJudgment(term.right, right_ty)))
-            
-            # Check result type
-            self.worklist.push(JudgmentEntry(SubJudgment(result_ty, ty)))
-            return Ok(None)
+            case BinOpTerm(op, left, right):
+                # Binary operations
+                left_ty, right_ty, result_ty = self.infer_binop_types(op)
+                
+                # Check operands have correct types
+                self.worklist.push(JudgmentEntry(ChkJudgment(left, left_ty)))
+                self.worklist.push(JudgmentEntry(ChkJudgment(right, right_ty)))
+                
+                # Check result type
+                self.worklist.push(JudgmentEntry(SubJudgment(result_ty, ty)))
+                return
 
-        elif isinstance(term, IfTerm):
-            # if e1 then e2 else e3
-            # e1 must be Bool, e2 and e3 must have type ty
-            self.worklist.push(JudgmentEntry(ChkJudgment(term.cond, ConType("Bool"))))
-            self.worklist.push(JudgmentEntry(ChkJudgment(term.then_branch, ty)))
-            self.worklist.push(JudgmentEntry(ChkJudgment(term.else_branch, ty)))
-            return Ok(None)
+            case IfTerm(cond, then_branch, else_branch):
+                # if e1 then e2 else e3
+                # e1 must be Bool, e2 and e3 must have type ty
+                self.worklist.push(JudgmentEntry(ChkJudgment(cond, ConType("Bool"))))
+                self.worklist.push(JudgmentEntry(ChkJudgment(then_branch, ty)))
+                self.worklist.push(JudgmentEntry(ChkJudgment(else_branch, ty)))
+                return
 
-        elif isinstance(term, CaseTerm):
-            # case e of { p1 -> e1; ... }
-            # Create fresh type for scrutinee
-            scrutinee_ty = ETVarType(self.worklist.fresh_evar())
-            self.worklist.push(TyVarEntry(scrutinee_ty.name, ExistentialTyVar()))
-            
-            # Check scrutinee
-            self.worklist.push(JudgmentEntry(ChkJudgment(term.scrutinee, scrutinee_ty)))
-            
-            # Check each arm (simplified - full pattern matching would be more complex)
-            for arm in term.arms:
-                # For now, just check the body has the right type
-                # TODO: Handle pattern variable bindings properly
-                self.worklist.push(JudgmentEntry(ChkJudgment(arm.body, ty)))
-            
-            return Ok(None)
+            case CaseTerm(scrutinee, arms):
+                # case e of { p1 -> e1; ... }
+                # Create fresh type for scrutinee
+                scrutinee_ty = ETVarType(self.worklist.fresh_evar())
+                self.worklist.push(TyVarEntry(scrutinee_ty.name, ExistentialTyVar()))
+                
+                # Check scrutinee
+                self.worklist.push(JudgmentEntry(ChkJudgment(scrutinee, scrutinee_ty)))
+                
+                # Check each arm (simplified - full pattern matching would be more complex)
+                for arm in arms:
+                    # For now, just check the body has the right type
+                    # TODO: Handle pattern variable bindings properly
+                    self.worklist.push(JudgmentEntry(ChkJudgment(arm.body, ty)))
+                
+                return
 
-        else:
-            return Err(TCPyTypeError(f"Unsupported term for inference: {type(term)}"))
+            case _:
+                raise TCPyTypeError(f"Unsupported term for inference: {type(term)}")
     
-    def solve_checking(self, term: CoreTerm, ty: CoreType) -> TypeResult[None]:
-        """Solve type checking judgment: term ⇐ ty."""
-        self.trace.append(f"Chk {self.term_to_string(term)} ⇐ {ty}")
+    def solve_checking(self, term: CoreTerm, ty: CoreType) -> None:
+        """Solve type checking judgment: term <= ty."""
+        self.trace.append(f"Chk {self.term_to_string(term)} <= {ty}")
 
-        # Special case: lambda against arrow type
-        if isinstance(term, LambdaTerm) and isinstance(ty, ArrowType):
-            # λx:T₁. e ⇐ T₁ -> T₂  becomes  T₁ <: T₁, x:T₁ ⊢ e ⇐ T₂
-            self.worklist.push(JudgmentEntry(SubJudgment(term.param_ty, ty.t1)))
-            self.worklist.push(VarEntry(term.param, term.param_ty))
-            self.worklist.push(JudgmentEntry(ChkJudgment(term.body, ty.t2)))
-            return Ok(None)
+        match (term, ty):
+            # Special case: lambda against arrow type
+            case (LambdaTerm(param, param_ty, body), ArrowType(expected_param, result_ty)):
+                # lambda x:T₁. e <= T₁ -> T₂  becomes  T₁ <: T₁, x:T₁ |- e <= T₂
+                self.worklist.push(JudgmentEntry(SubJudgment(param_ty, expected_param)))
+                self.worklist.push(VarEntry(param, param_ty))
+                self.worklist.push(JudgmentEntry(ChkJudgment(body, result_ty)))
+                return
 
-        # Special case: checking against forall type
-        if isinstance(ty, ForallType):
-            # e ⇐ ∀α.A  becomes  α ⊢ e ⇐ A
-            fresh_var = self.worklist.fresh_var()
-            self.worklist.push(TyVarEntry(fresh_var, UniversalTyVar()))
-            substituted_ty = self.substitute_type(ty.var, VarType(fresh_var), ty.ty)
-            self.worklist.push(JudgmentEntry(ChkJudgment(term, substituted_ty)))
-            return Ok(None)
+            # Special case: checking against forall type
+            case (_, ForallType(var, body)):
+                # e <= forall alpha.A  becomes  alpha |- e <= A
+                fresh_var = self.worklist.fresh_var()
+                self.worklist.push(TyVarEntry(fresh_var, UniversalTyVar()))
+                substituted_ty = self.substitute_type(var, VarType(fresh_var), body)
+                self.worklist.push(JudgmentEntry(ChkJudgment(term, substituted_ty)))
+                return
 
-        # General case: infer type and check subtyping
-        # e ⇐ A  becomes  e ⊢ ^α, ^α <: A
-        inferred_ty = ETVarType(self.worklist.fresh_evar())
-        self.worklist.push(TyVarEntry(inferred_ty.name, ExistentialTyVar()))
-        
-        self.worklist.push(JudgmentEntry(SubJudgment(inferred_ty, ty)))
-        self.worklist.push(JudgmentEntry(InfJudgment(term, inferred_ty)))
-        return Ok(None)
+            # General case: infer type and check subtyping
+            case _:
+                # e <= A  becomes  e |- ^alpha, ^alpha <: A
+                inferred_ty = ETVarType(self.worklist.fresh_evar())
+                self.worklist.push(TyVarEntry(inferred_ty.name, ExistentialTyVar()))
+                
+                self.worklist.push(JudgmentEntry(SubJudgment(inferred_ty, ty)))
+                self.worklist.push(JudgmentEntry(InfJudgment(term, inferred_ty)))
+                return
     
-    def solve_inf_app(self, func_ty: CoreType, arg: CoreTerm, result_ty: CoreType) -> TypeResult[None]:
-        """Solve application inference judgment: func_ty • arg ⊢ result_ty."""
-        self.trace.append(f"InfApp {func_ty} • {self.term_to_string(arg)} ⊢ {result_ty}")
+    def solve_inf_app(self, func_ty: CoreType, arg: CoreTerm, result_ty: CoreType) -> None:
+        """Solve application inference judgment: func_ty * arg |- result_ty."""
+        self.trace.append(f"InfApp {func_ty} * {self.term_to_string(arg)} |- {result_ty}")
 
-        if isinstance(func_ty, ArrowType):
-            # T1 -> T2 • e ⊢ A  becomes  T2 <: A, e ⇐ T1
-            self.worklist.push(JudgmentEntry(SubJudgment(func_ty.t2, result_ty)))
-            self.worklist.push(JudgmentEntry(ChkJudgment(arg, func_ty.t1)))
-            return Ok(None)
+        match func_ty:
+            case ArrowType(param_ty, ret_ty):
+                # T1 -> T2 * e |- A  becomes  T2 <: A, e <= T1
+                self.worklist.push(JudgmentEntry(SubJudgment(ret_ty, result_ty)))
+                self.worklist.push(JudgmentEntry(ChkJudgment(arg, param_ty)))
+                return
 
-        elif isinstance(func_ty, ForallType):
-            # ∀α.A • e ⊢ C  becomes  [^β/α]A • e ⊢ C  where ^β is fresh
-            fresh_evar = self.worklist.fresh_evar()
-            self.worklist.push(TyVarEntry(fresh_evar, ExistentialTyVar()))
-            substituted = self.substitute_type(func_ty.var, ETVarType(fresh_evar), func_ty.ty)
-            self.worklist.push(JudgmentEntry(InfAppJudgment(substituted, arg, result_ty)))
-            return Ok(None)
+            case ForallType(var, body):
+                # forall alpha.A * e |- C  becomes  [^beta/alpha]A * e |- C  where ^beta is fresh
+                fresh_evar = self.worklist.fresh_evar()
+                self.worklist.push(TyVarEntry(fresh_evar, ExistentialTyVar()))
+                substituted = self.substitute_type(var, ETVarType(fresh_evar), body)
+                self.worklist.push(JudgmentEntry(InfAppJudgment(substituted, arg, result_ty)))
+                return
 
-        elif isinstance(func_ty, ETVarType):
-            # ^α • e ⊢ A  becomes  ^α = ^β -> ^γ, ^γ <: A, e ⇐ ^β
-            param_ty_name = self.worklist.fresh_evar()
-            ret_ty_name = self.worklist.fresh_evar()
-            param_ty = ETVarType(param_ty_name)
-            ret_ty = ETVarType(ret_ty_name)
+            case ETVarType(var_name):
+                # ^alpha * e |- A  becomes  ^alpha = ^beta -> ^gamma, ^gamma <: A, e <= ^beta
+                param_ty_name = self.worklist.fresh_evar()
+                ret_ty_name = self.worklist.fresh_evar()
+                param_ty = ETVarType(param_ty_name)
+                ret_ty = ETVarType(ret_ty_name)
 
-            # Add fresh variables to worklist
-            self.worklist.push(TyVarEntry(param_ty_name, ExistentialTyVar()))
-            self.worklist.push(TyVarEntry(ret_ty_name, ExistentialTyVar()))
+                # Add fresh variables to worklist
+                self.worklist.push(TyVarEntry(param_ty_name, ExistentialTyVar()))
+                self.worklist.push(TyVarEntry(ret_ty_name, ExistentialTyVar()))
 
-            # Solve existential variable
-            arrow_ty = ArrowType(param_ty, ret_ty)
-            result = self.worklist.solve_evar(func_ty.name, arrow_ty)
-            if isinstance(result, Err):
-                return result
+                # Solve existential variable
+                arrow_ty = ArrowType(param_ty, ret_ty)
+                result = self.worklist.solve_evar(var_name, arrow_ty)
+                if isinstance(result, Err):
+                    return result
 
-            # Add subtyping and checking judgments
-            self.worklist.push(JudgmentEntry(SubJudgment(ret_ty, result_ty)))
-            self.worklist.push(JudgmentEntry(ChkJudgment(arg, param_ty)))
-            return Ok(None)
+                # Add subtyping and checking judgments
+                self.worklist.push(JudgmentEntry(SubJudgment(ret_ty, result_ty)))
+                self.worklist.push(JudgmentEntry(ChkJudgment(arg, param_ty)))
+                return
 
-        else:
-            return Err(NotAFunctionError(func_ty))
+            case _:
+                raise NotAFunctionError(func_ty)
     
     def term_to_string(self, term: CoreTerm) -> str:
         """Convert term to string for tracing."""
@@ -493,48 +495,50 @@ class DKInference:
     
     def occurs_check(self, var: str, ty: CoreType) -> bool:
         """Check if a type variable occurs in a type (to prevent infinite types)."""
-        if isinstance(ty, ETVarType) or isinstance(ty, VarType):
-            return ty.name == var
-        elif isinstance(ty, ArrowType):
-            return self.occurs_check(var, ty.t1) or self.occurs_check(var, ty.t2)
-        elif isinstance(ty, AppType):
-            return self.occurs_check(var, ty.t1) or self.occurs_check(var, ty.t2)
-        elif isinstance(ty, ForallType):
-            return self.occurs_check(var, ty.ty)
-        # For other types like ConType, ProductType, etc., the variable doesn't occur
-        return False
+        match ty:
+            case ETVarType(name) | VarType(name):
+                return name == var
+            case ArrowType(t1, t2) | AppType(t1, t2):
+                return self.occurs_check(var, t1) or self.occurs_check(var, t2)
+            case ForallType(_, body):
+                return self.occurs_check(var, body)
+            case _:
+                # For other types like ConType, ProductType, etc., the variable doesn't occur
+                return False
     
     def substitute_type(self, var: str, replacement: CoreType, ty: CoreType) -> CoreType:
         """Substitute a type variable with a replacement type."""
-        if isinstance(ty, VarType) and ty.name == var:
-            return replacement
-        elif isinstance(ty, ArrowType):
-            return ArrowType(
-                self.substitute_type(var, replacement, ty.t1),
-                self.substitute_type(var, replacement, ty.t2)
-            )
-        elif isinstance(ty, ForallType) and ty.var != var:
-            # Don't substitute under bindings of the same variable
-            return ForallType(
-                ty.var,
-                self.substitute_type(var, replacement, ty.ty)
-            )
-        elif isinstance(ty, AppType):
-            return AppType(
-                self.substitute_type(var, replacement, ty.t1),
-                self.substitute_type(var, replacement, ty.t2)
-            )
-        # For other types, return unchanged
-        return ty
+        match ty:
+            case VarType(name) if name == var:
+                return replacement
+            case ArrowType(t1, t2):
+                return ArrowType(
+                    self.substitute_type(var, replacement, t1),
+                    self.substitute_type(var, replacement, t2)
+                )
+            case ForallType(bound_var, body) if bound_var != var:
+                # Don't substitute under bindings of the same variable
+                return ForallType(
+                    bound_var,
+                    self.substitute_type(var, replacement, body)
+                )
+            case AppType(t1, t2):
+                return AppType(
+                    self.substitute_type(var, replacement, t1),
+                    self.substitute_type(var, replacement, t2)
+                )
+            case _:
+                # For other types, return unchanged
+                return ty
     
-    def instantiate_left(self, var: str, ty: CoreType) -> TypeResult[None]:
-        """Instantiate left existential variable: ^α <: A."""
+    def instantiate_left(self, var: str, ty: CoreType) -> None:
+        """Instantiate left existential variable: ^alpha <: A."""
         if isinstance(ty, ETVarType) and self.worklist.before(var, ty.name):
-            # ^α <: ^β where α appears before β
+            # ^alpha <: ^beta where alpha appears before beta
             result = self.worklist.solve_evar(ty.name, ETVarType(var))
             return result
         elif isinstance(ty, ArrowType):
-            # ^α <: A -> B  becomes  ^α = ^α1 -> ^α2, A <: ^α1, ^α2 <: B
+            # ^alpha <: A -> B  becomes  ^alpha = ^alpha1 -> ^alpha2, A <: ^alpha1, ^alpha2 <: B
             a1 = self.worklist.fresh_evar()
             a2 = self.worklist.fresh_evar()
             arrow_ty = ArrowType(ETVarType(a1), ETVarType(a2))
@@ -549,9 +553,9 @@ class DKInference:
             # Note: contravariant in first argument, covariant in second
             self.worklist.push(JudgmentEntry(SubJudgment(ty.t1, ETVarType(a1))))
             self.worklist.push(JudgmentEntry(SubJudgment(ETVarType(a2), ty.t2)))
-            return Ok(None)
+            return
         elif isinstance(ty, AppType):
-            # ^α <: F A  becomes  ^α = ^α1 ^α2, ^α1 <: F, ^α2 <: A
+            # ^alpha <: F A  becomes  ^alpha = ^alpha1 ^alpha2, ^alpha1 <: F, ^alpha2 <: A
             a1 = self.worklist.fresh_evar()
             a2 = self.worklist.fresh_evar()
             app_ty = AppType(ETVarType(a1), ETVarType(a2))
@@ -565,9 +569,9 @@ class DKInference:
             
             self.worklist.push(JudgmentEntry(SubJudgment(ETVarType(a1), ty.t1)))
             self.worklist.push(JudgmentEntry(SubJudgment(ETVarType(a2), ty.t2)))
-            return Ok(None)
+            return
         elif isinstance(ty, ForallType):
-            # ^α <: ∀β.B  becomes  ►β,β |- ^α <: B
+            # ^alpha <: forall beta.B  becomes  ►beta,beta |- ^alpha <: B
             fresh_var = self.worklist.fresh_var()
             self.worklist.push(TyVarEntry(fresh_var, UniversalTyVar()))
             substituted = self.substitute_type(ty.var, VarType(fresh_var), ty.ty)
@@ -576,16 +580,16 @@ class DKInference:
             # For monotypes, just solve directly
             return self.worklist.solve_evar(var, ty)
         else:
-            return Err(InstantiationError(var, ty))
+            raise InstantiationError(var, ty)
     
-    def instantiate_right(self, ty: CoreType, var: str) -> TypeResult[None]:
-        """Instantiate right existential variable: A <: ^α."""
+    def instantiate_right(self, ty: CoreType, var: str) -> None:
+        """Instantiate right existential variable: A <: ^alpha."""
         if isinstance(ty, ETVarType) and self.worklist.before(var, ty.name):
-            # ^β <: ^α where α appears before β
+            # ^beta <: ^alpha where alpha appears before beta
             result = self.worklist.solve_evar(ty.name, ETVarType(var))
             return result
         elif isinstance(ty, ArrowType):
-            # A -> B <: ^α  becomes  ^α = ^α1 -> ^α2, ^α1 <: A, B <: ^α2
+            # A -> B <: ^alpha  becomes  ^alpha = ^alpha1 -> ^alpha2, ^alpha1 <: A, B <: ^alpha2
             a1 = self.worklist.fresh_evar()
             a2 = self.worklist.fresh_evar()
             arrow_ty = ArrowType(ETVarType(a1), ETVarType(a2))
@@ -599,9 +603,9 @@ class DKInference:
             
             self.worklist.push(JudgmentEntry(SubJudgment(ETVarType(a1), ty.t1)))
             self.worklist.push(JudgmentEntry(SubJudgment(ty.t2, ETVarType(a2))))
-            return Ok(None)
+            return
         elif isinstance(ty, AppType):
-            # F A <: ^α  becomes  ^α = ^α1 ^α2, F <: ^α1, A <: ^α2
+            # F A <: ^alpha  becomes  ^alpha = ^alpha1 ^alpha2, F <: ^alpha1, A <: ^alpha2
             a1 = self.worklist.fresh_evar()
             a2 = self.worklist.fresh_evar()
             app_ty = AppType(ETVarType(a1), ETVarType(a2))
@@ -615,9 +619,9 @@ class DKInference:
             
             self.worklist.push(JudgmentEntry(SubJudgment(ty.t1, ETVarType(a1))))
             self.worklist.push(JudgmentEntry(SubJudgment(ty.t2, ETVarType(a2))))
-            return Ok(None)
+            return
         elif isinstance(ty, ForallType):
-            # ∀β.B <: ^α  becomes  ►^β,^β |- [^β/β]B <: ^α
+            # forall beta.B <: ^alpha  becomes  ►^beta,^beta |- [^beta/beta]B <: ^alpha
             fresh_evar = self.worklist.fresh_evar()
             self.worklist.push(TyVarEntry(fresh_evar, MarkerTyVar()))
             self.worklist.push(TyVarEntry(fresh_evar, ExistentialTyVar()))
@@ -627,27 +631,30 @@ class DKInference:
             # For monotypes, just solve directly
             return self.worklist.solve_evar(var, ty)
         else:
-            return Err(InstantiationError(var, ty))
+            raise InstantiationError(var, ty)
     
     def is_monotype(self, ty: CoreType) -> bool:
         """Check if a type is a monotype (no forall quantifiers)."""
-        if isinstance(ty, (ConType, VarType, ETVarType)):
-            return True
-        elif isinstance(ty, (ArrowType, AppType)):
-            return self.is_monotype(ty.t1) and self.is_monotype(ty.t2)
-        elif isinstance(ty, ForallType):
-            return False
-        # For other types like ProductType, assume they're monotypes for now
-        return True
+        match ty:
+            case ConType(_) | VarType(_) | ETVarType(_):
+                return True
+            case ArrowType(t1, t2) | AppType(t1, t2):
+                return self.is_monotype(t1) and self.is_monotype(t2)
+            case ForallType(_, _):
+                return False
+            case _:
+                # For other types like ProductType, assume they're monotypes for now
+                return True
     
     def infer_binop_types(self, op: CoreBinOp) -> Tuple[CoreType, CoreType, CoreType]:
         """Infer types for binary operations: (left_type, right_type, result_type)."""
-        if isinstance(op, (AddOp, SubOp, MulOp, DivOp)):
-            # Arithmetic operations: Int -> Int -> Int
-            return (ConType("Int"), ConType("Int"), ConType("Int"))
-        elif isinstance(op, (LtOp, LeOp)):
-            # Comparison operations: Int -> Int -> Bool
-            return (ConType("Int"), ConType("Int"), ConType("Bool"))
-        else:
-            # Default fallback - shouldn't happen with proper typing
-            return (ConType("Int"), ConType("Int"), ConType("Int"))
+        match op:
+            case AddOp() | SubOp() | MulOp() | DivOp():
+                # Arithmetic operations: Int -> Int -> Int
+                return (ConType("Int"), ConType("Int"), ConType("Int"))
+            case LtOp() | LeOp():
+                # Comparison operations: Int -> Int -> Bool
+                return (ConType("Int"), ConType("Int"), ConType("Bool"))
+            case _:
+                # Default fallback - shouldn't happen with proper typing
+                return (ConType("Int"), ConType("Int"), ConType("Int"))

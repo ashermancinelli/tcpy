@@ -1,27 +1,10 @@
 """Error types for the type checker."""
 
-from typing import Optional, Tuple, TypeVar, Generic
+from typing import Optional, Tuple
 from dataclasses import dataclass
 
 # Type alias for source location spans
 Span = Optional[Tuple[int, int]]
-
-T = TypeVar('T')
-
-# Result types
-class Result(Generic[T]):
-    """Base result type for type checking operations."""
-    pass
-
-@dataclass
-class Ok(Result[T]):
-    """Success result."""
-    value: T
-
-@dataclass 
-class Err(Result[T]):
-    """Error result."""
-    error: 'TypeError'
 
 
 class TypeError(Exception):
@@ -110,5 +93,4 @@ class InstantiationError(TypeError):
         super().__init__(f"Instantiation failure: cannot instantiate '{var}' with '{ty}'", span)
 
 
-# Type aliases for convenience
-TypeResult = Result
+# Remove old type aliases - no longer needed
