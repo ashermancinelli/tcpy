@@ -470,9 +470,7 @@ class DKInference:
 
                 # Solve existential variable
                 arrow_ty = ArrowType(param_ty, ret_ty)
-                result = self.worklist.solve_evar(var_name, arrow_ty)
-                if isinstance(result, Err):
-                    return result
+                self.worklist.solve_evar(var_name, arrow_ty)
 
                 # Add subtyping and checking judgments
                 self.worklist.push(JudgmentEntry(SubJudgment(ret_ty, result_ty)))
@@ -535,17 +533,15 @@ class DKInference:
         """Instantiate left existential variable: ^alpha <: A."""
         if isinstance(ty, ETVarType) and self.worklist.before(var, ty.name):
             # ^alpha <: ^beta where alpha appears before beta
-            result = self.worklist.solve_evar(ty.name, ETVarType(var))
-            return result
+            self.worklist.solve_evar(ty.name, ETVarType(var))
+            return
         elif isinstance(ty, ArrowType):
             # ^alpha <: A -> B  becomes  ^alpha = ^alpha1 -> ^alpha2, A <: ^alpha1, ^alpha2 <: B
             a1 = self.worklist.fresh_evar()
             a2 = self.worklist.fresh_evar()
             arrow_ty = ArrowType(ETVarType(a1), ETVarType(a2))
             
-            result = self.worklist.solve_evar(var, arrow_ty)
-            if isinstance(result, Err):
-                return result
+            self.worklist.solve_evar(var, arrow_ty)
             
             self.worklist.push(TyVarEntry(a1, ExistentialTyVar()))
             self.worklist.push(TyVarEntry(a2, ExistentialTyVar()))
@@ -560,9 +556,7 @@ class DKInference:
             a2 = self.worklist.fresh_evar()
             app_ty = AppType(ETVarType(a1), ETVarType(a2))
             
-            result = self.worklist.solve_evar(var, app_ty)
-            if isinstance(result, Err):
-                return result
+            self.worklist.solve_evar(var, app_ty)
             
             self.worklist.push(TyVarEntry(a1, ExistentialTyVar()))
             self.worklist.push(TyVarEntry(a2, ExistentialTyVar()))
@@ -594,9 +588,7 @@ class DKInference:
             a2 = self.worklist.fresh_evar()
             arrow_ty = ArrowType(ETVarType(a1), ETVarType(a2))
             
-            result = self.worklist.solve_evar(var, arrow_ty)
-            if isinstance(result, Err):
-                return result
+            self.worklist.solve_evar(var, arrow_ty)
             
             self.worklist.push(TyVarEntry(a1, ExistentialTyVar()))
             self.worklist.push(TyVarEntry(a2, ExistentialTyVar()))
@@ -610,9 +602,7 @@ class DKInference:
             a2 = self.worklist.fresh_evar()
             app_ty = AppType(ETVarType(a1), ETVarType(a2))
             
-            result = self.worklist.solve_evar(var, app_ty)
-            if isinstance(result, Err):
-                return result
+            self.worklist.solve_evar(var, app_ty)
             
             self.worklist.push(TyVarEntry(a1, ExistentialTyVar()))
             self.worklist.push(TyVarEntry(a2, ExistentialTyVar()))
