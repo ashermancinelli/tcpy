@@ -20,7 +20,7 @@ class TestExceptionHandling:
         # Check that trace was generated
         trace = dk.get_trace()
         assert len(trace) > 0
-        assert any("Chk 42 <= Int" in entry for entry in trace)
+        assert any("Checking 42 against Int" in entry for entry in trace)
     
     def test_unbound_variable_error(self):
         dk = DKInference()

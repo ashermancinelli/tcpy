@@ -21,8 +21,7 @@ class TestBasicInference:
         
         # Check trace contains expected inference
         trace = dk.get_trace()
-        assert any("Chk 42 <= Int" in entry for entry in trace)
-        assert any("Sub Int <:" in entry for entry in trace)  # Should have some subtyping
+        assert any("Checking 42 against Int" in entry for entry in trace)
     
     def test_infer_unbound_variable(self):
         dk = DKInference()

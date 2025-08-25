@@ -41,7 +41,7 @@ class TestDKInferenceBasic:
         
         # Should have at least one trace entry
         assert len(trace) > 0
-        assert "Chk 42 <= Int" in trace
+        assert "Checking 42 against Int" in trace
     
     def test_solve_empty_worklist(self):
         dk = DKInference()
